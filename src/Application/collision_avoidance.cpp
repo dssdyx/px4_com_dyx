@@ -50,10 +50,9 @@ enum Command
 #define Width 640
 //--------------------------------------------输入--------------------------------------------------
 sensor_msgs::LaserScan Laser;                                   //激光雷达点云数据
-geometry_msgs::PoseStamped pos_drone;                                  //无人机当前位置
+geometry_msgs::PoseStamped pos_drone;                           //无人机当前位置
 float target_x;                                                 //期望位置_x
 float target_y;                                                 //期望位置_y
-
 int range_min;                                                //激光雷达探测范围 最小角度
 int range_max;                                                //激光雷达探测范围 最大角度
 float last_time = 0;
@@ -71,47 +70,42 @@ float p_xy;                                                     //追踪部分�
 float vel_track[2];                                             //追踪部分速度
 float vel_track_max;                                            //追踪部分速度限幅
 int flag_land;                                                  //降落标志位
-//--------------------------------------------dyx-------------------------------------------------
-float door_center_x[2];
-float door_center_y[2];
-bool reach_door_flag[2];
-float fly_height;
-Eigen::Quaterniond q_fcu;
-Eigen::Vector3d Euler_fcu;
-int mode_num;
-//--------------------------------------------dyx for 4x4demo-------------------------------------------------
-float A_x,A_y;
-float B_x,B_y;
-float C_x,C_y;
-bool reach_ABC_flag[3];
-bool return_origin_flag[3];
-//--------------------------------------------dyx for detection-------------------------------------------------
-int detect_num;
-darknet_ros_msgs::BoundingBox darknet_box;
-darknet_ros_msgs::BoundingBoxes darknet_boxes;
-std_msgs::String item_class;
-int flag_hold;
-cv::Mat depth_pic;
-float factor = 1000.0;
-float fx=554.3827;
+//--------------------------------------------穿门壁障用-------------------------------------------------
+float door_center_x[2];                                         //前两道门的x坐标
+float door_center_y[2];                                         //前两道门的y坐标
+bool reach_door_flag[2];                                        //到达前两道门的标志
+float fly_height;                                               //设定的飞行高度
+Eigen::Quaterniond q_fcu;                                       //飞机姿态四元数
+Eigen::Vector3d Euler_fcu;                                      //飞机姿态欧拉角
+int mode_num;                                                   //模式
+//--------------------------------------------4X4往返demo用-------------------------------------------------
+float A_x,A_y;                                                   //A点坐标
+float B_x,B_y;                                                   //B点坐标
+float C_x,C_y;                                                   //C点坐标
+bool reach_ABC_flag[3];                                          //到达ABC的标志
+bool return_origin_flag[3];                                      //分别从ABC返回的标志
+//--------------------------------------------目标检测，识别降落用-------------------------------------------------
+int detect_num;                                                  //darknet发布的检测到的物体数目
+darknet_ros_msgs::BoundingBox darknet_box;                       //用于模式4只用识别一张图的情况
+darknet_ros_msgs::BoundingBoxes darknet_boxes;                   //用于模式5需要识别三张图的情况
+int flag_hold;                                                   //悬停标志
+float fx=554.3827;                                               //相机内参
 float fy=554.3827;
 float cx=320;
 float cy=240;
-float pic_target[2];
-float abs_distance1=10;
-//目标检测壁障原理：检测图片中心处于飞机多少度，用激光算深度，期间要保持角度的稳定，和机体高度的稳定
-//-------------------------------------------dyx for firematch----------------------------------------------
-int detect_num_fire;
-std::vector<float> fire_target_x;
-std::vector<float> fire_target_y;
-std::vector<int> fire_count;
-bool reach_firedoor_flag;
-void find_fire_center();
-void nav_fire(int i);
-float compute_distance(float x0, float y0, float x1, float y1);
-void findfiredoorcentor();
-int pushcount;
-bool reach_fire_flag[3];
+float pic_target[2];                                             //模式4的图像中心ENU坐标
+float abs_distance1=10;                                          //为模式4中穿越2门与识别图像之间的过度而设置的最小距离值
+//-------------------------------------------火灾识别demo用----------------------------------------------
+int detect_num_fire;                                             //检测到的火灾图片数目（用人像代替）
+std::vector<float> fire_target_x;                                //图片中心x坐标
+std::vector<float> fire_target_y;                                //图片中心y坐标
+std::vector<int> fire_count;                                     //（弃用）用于判断已存在vector内的图片中心坐标是否是异常值
+bool reach_firedoor_flag;                                        //用于模式5中第一道门的识别
+void find_fire_center();                                         //当通过第一道门后，寻找图片的中心（3个图片）
+void nav_fire(int i);                                            //找到图片中心后，对图片进行导航
+float compute_distance(float x0, float y0, float x1, float y1);  //不考虑z轴的平面距离
+int pushcount;                                                   //图片总检测量指标（弃用）
+bool reach_fire_flag[3];                                         //判断分别到达三张图的标志
 //--------------------------------------------输出--------------------------------------------------
 std_msgs::Bool flag_collision_avoidance;                       //是否进入避障模式标志位
 float vel_sp_body[2];                                           //总速度
@@ -123,9 +117,9 @@ void cal_min_distance();
 float satfunc(float data, float Max);
 void printf();                                                                       //打印函数
 void printf_param();                                                                 //打印各项参数以供检查
-void collision_avoidance(float target_x,float target_y);
-void finddoorcentor(int i);
-void detect_nav();
+void collision_avoidance(float target_x,float target_y);                             //人工势场法壁障
+void finddoorcentor(int i);                                                          //通过激光雷达找到门口中心
+void detect_nav();                                                                   //模式4中穿越两道门口后识别图像并导航
 // 【坐标系旋转函数】- 机体系到enu系
 // input是机体系,output是惯性系，yaw_angle是当前偏航角
 void rotation_yaw(float yaw_angle, float input[2], float output[2])
@@ -174,6 +168,7 @@ void lidar_cb(const sensor_msgs::LaserScan::ConstPtr& scan)
 
 }
 
+//当前无人机坐标，六轴
 void pos_cb(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
     pos_drone = *msg;
@@ -185,11 +180,12 @@ void pos_cb(const geometry_msgs::PoseStamped::ConstPtr &msg)
     //Transform the Quaternion to Euler Angles
     Euler_fcu = quaternion_to_euler(q_fcu);
 }
-
+//darknet发布的检测到的图片数目
 void darknet_found_cb(const std_msgs::Int8::ConstPtr &msg)
 {
     detect_num = msg->data;
 }
+//darknet发布的检测到的所有图片的坐标
 void darknet_box_cb(const darknet_ros_msgs::BoundingBoxes::ConstPtr &msg)
 {
     darknet_boxes=*msg; //for 5
@@ -201,24 +197,6 @@ void darknet_box_cb(const darknet_ros_msgs::BoundingBoxes::ConstPtr &msg)
             darknet_box = msg->bounding_boxes[0];//for 4
         }
     }
-}
-void depth_cb(const sensor_msgs::Image::ConstPtr &img)
-{
-    //cout<<"hello!"<<endl;
-    cv_bridge::CvImageConstPtr cv_ptrD;
-    try{
-        cv_ptrD = cv_bridge::toCvCopy(img,sensor_msgs::image_encodings::TYPE_32FC1);
-    } catch(cv_bridge::Exception& e)
-    {
-        ROS_ERROR("cv_bridge exception: %s",e.what());
-        return;
-    }
-    //cout<<cv_ptrD->image.rows<<endl;
-    //cout<<cv_ptrD->image.cols<<endl;
-    //cout<<cv_ptrD->image.channels()<<endl;
-    cv_ptrD->image.convertTo(depth_pic,CV_32F,1.0/factor);
-    //cout<<"depth: "<<depth_pic.ptr<float>(240)[320]<<endl;//(row)(col)
-
 }
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>主 函 数<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 int main(int argc, char **argv)
@@ -238,14 +216,13 @@ int main(int argc, char **argv)
     ros::Subscriber darknet_found_sub = nh.subscribe<std_msgs::Int8>("/darknet_ros/found_object", 1, darknet_found_cb);//dyx
     ros::Subscriber darknet_box_sub = nh.subscribe<darknet_ros_msgs::BoundingBoxes>("/darknet_ros/bounding_boxes", 1, darknet_box_cb);//dyx
 
-    image_transport::Subscriber depth_sub = it.subscribe("/realsense_plugin/camera/depth/image_raw",1,depth_cb);
     //【订阅】无人机当前位置 坐标系 NED系
     //ros::Subscriber position_sub = nh.subscribe<geometry_msgs::Pose>("/drone/pos", 100, pos_cb);
     ros::Subscriber position_sub = nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 100, pos_cb);  //dyx
 
     // 【发布】发送给position_control.cpp的命令
     ros::Publisher command_pub = nh.advertise<px4_command::command>("/px4/command", 10);
-
+    //【发布】发送给gestrue control的命令，帮助Arm与Takeoff
     ros::Publisher gesture_pub = nh.advertise<std_msgs::String>("/gesture/command", 10);
 
     //读取参数表中的参数
@@ -275,7 +252,7 @@ int main(int argc, char **argv)
     nh.param<float>("C_x", C_x, 0.0);
     nh.param<float>("C_y", C_y, 0.0);
 
-    //dyx
+    //获取设定的起飞高度
     nh.getParam("/px4_pos_controller/Takeoff_height",fly_height);
 
 
@@ -284,12 +261,17 @@ int main(int argc, char **argv)
     printf_param();
 
     int check_flag;
-    //输入1,继续，其他，退出程序
+    //输入1,继续，其他，退出程序，检查设定的参数是否正确
     cout << "Please check the parameter and setting，1 for go on， else for quit: "<<endl;
     cin >> check_flag;
+    if(check_flag != 1)
+    {
+        return -1;
+    }
 
     int Arm_flag;
     std_msgs::String launch_command;
+    //输入1，发动电机，否则无操作
     cout<<"Whether choose to Arm? 1 for Arm, 0 for quit"<<endl;
     cin >> Arm_flag;
     if(Arm_flag)
@@ -300,6 +282,7 @@ int main(int argc, char **argv)
 
     int Takeoff_flag;
     std_msgs::String Takeoff_command;
+    //输入1，按照设定高度起飞，否则无操作
     cout<<"Whether choose to Takeoff? 1 for Takeoff, 0 for quit"<<endl;
     cin >> Takeoff_flag;
     if(Takeoff_flag)
@@ -309,10 +292,9 @@ int main(int argc, char **argv)
     }
 
 
-    if(check_flag != 1)
-    {
-        return -1;
-    }
+    //选择一个模式，1是穿越两道门后前往给点定目标点；2是4X4场地内选择ABC导航再返回，穿插壁障；3是原始人工势场法壁障，
+    //当障碍物与出发点和目标点三点一线，有卡住的可能；4.穿越两道门后根据识别到的图像进行降落；5.火灾救援demo，穿越一道门后
+    //识别三个图像依次导航并在最后一个图像前降落
     cout << "Which mdoe? 1 for door, 2 for 4x4demo, 3 for normal, 4 for detection, 5 for firematch: "<<endl;
     cin >> mode_num;
 
@@ -349,12 +331,14 @@ int main(int argc, char **argv)
         //1. 更新雷达点云数据，存储在Laser中,并计算四向最小距离
         ros::spinOnce();
         /**************************dyx****************************************/
+        //模式1策略：每次穿门前先计算门的中心xy坐标，导航到此处，再以此计算下一道门的坐标，直到目标点与飞机之间无障碍物为止。
         if(mode_num==1)
         {
             if(!reach_door_flag[0]) finddoorcentor(0);
             else if(reach_door_flag[0]&&!reach_door_flag[1]) finddoorcentor(1);
             else if(reach_door_flag[0]&&reach_door_flag[1]) collision_avoidance(target_x,target_y);
         }
+        //模式2策略：ABC三点坐标已知，每次飞往ABC三点与返回原点时设定标志。
         if(mode_num==2)
         {
             if(!reach_ABC_flag[0])  //飞到A点，标记1，
@@ -426,10 +410,12 @@ int main(int argc, char **argv)
 
 
         }
+        //模式3策略：原始人工势场法避障。
         if(mode_num==3)
         {
             collision_avoidance(target_x,target_y);
         }
+        //模式4策略：穿门原理同模式1，当穿完最后一道门对墙面人像图片进行识别并计算图片中心xy坐标，导航过去。
         if(mode_num==4)
         {
             if(!reach_door_flag[0]) finddoorcentor(0);
@@ -446,6 +432,7 @@ int main(int argc, char **argv)
             }
             else if(reach_door_flag[0]&&reach_door_flag[1]) detect_nav();
         }
+        //模式5策略：先穿门，穿门后将识别到的图片坐标存入vector再一一导航。
         if(mode_num==5)
         {
             //1.穿门
@@ -465,7 +452,7 @@ int main(int argc, char **argv)
             }
         }
         /**************************dyx****************************************/
-
+        //弃用Body下的指令
         //5. 发布Command指令给position_controller.cpp
 /*      Command_now.command = Move_Body;     //机体系下移动
         Command_now.comid = comid;
@@ -476,6 +463,7 @@ int main(int argc, char **argv)
         Command_now.pos_sp[2] =  0;
         Command_now.yaw_sp = 0 ;
 */
+        //启用ENU下的指令
         Command_now.command = Move_ENU;     //机体系下移动
         Command_now.comid = comid;
         comid++;
@@ -716,6 +704,7 @@ void collision_avoidance(float target_x,float target_y)
     rotation_yaw(Euler_fcu[2],vel_sp_body,vel_sp_ENU);
 
 }
+//思路：门相对于墙的激光数据会有很大的突变，在激光数据里找到这个突变范围，再转换到ENU坐标系下即可求出门的中心
 void finddoorcentor(int i)
 {
     //1.if no centor , findcentor set target
@@ -799,6 +788,7 @@ void finddoorcentor(int i)
         else reach_firedoor_flag=true;
     }
 }
+//思路：在像素坐标系中的坐标可以通过激光数据和内参求出相对于机体的位置
 void detect_nav()
 {
     if(detect_num)
@@ -832,87 +822,7 @@ void detect_nav()
         }
 
 }
-void findfiredoorcentor()
-{
-
-    float a,b,c;
-    double l;
-    cout<<"********************"<<endl;
-    //if(!door_center_x[0])
-    {
-        a=Laser.ranges[0];
-        b=Laser.ranges[89];
-        c=Laser.ranges[270];
-        int theta1=atan(b/a)/3.1415926*180;
-        int theta2=atan(c/a)/3.1415926*180;
-        cout<<"theta1: "<<theta1<<endl;
-        cout<<"theta2: "<<theta2<<endl;
-        std::vector<int> door_angle;
-        door_angle.reserve(theta1+theta2);
-        for(int k=theta1;k>0;k--){
-            float angle=k;
-            l=a/cos(angle/180*3.1415926);
-            float dl=abs(l-Laser.ranges[k]);
-            if(dl>1) door_angle.push_back(k);
-            cout<<"k: "<<k<<" l: "<<l<<" Laser: "<<Laser.ranges[k]<<" dl: "<<dl<<endl;
-        }
-        for(int k=0;k<=theta2;k++){
-            float angle=k;
-            l=a/cos(angle/180*3.1415926);
-            float dl=abs(l-Laser.ranges[359-k]);
-            if(dl>1) door_angle.push_back(359-k);
-            cout<<"k: "<<359-k<<" l: "<<l<<" Laser: "<<Laser.ranges[359-k]<<" dl: "<<dl<<endl;
-        }
-        cout<<"door angle num: "<<door_angle.size()<<endl;
-        cout<<"first :"<<door_angle.front()<<"last one: "<<door_angle.back()<<endl;
-
-        int the1 = door_angle.front();
-        int the2 = door_angle.back();
-        float angle1,angle2;
-        float x1,x2,y1,y2;
-        x1=a;
-        x2=a;
-        if(the1>270)
-        {
-            angle1=359-the1;
-            y1=-a*tan(angle1/180*3.1415926);
-        }
-        else
-        {
-            angle1=the1;
-            y1=a*tan(angle1/180*3.1415926);
-        }
-        if(the2>270)
-        {
-            angle2=359-the2;
-            y2=-a*tan(angle2/180*3.1415926);
-        }
-        else
-        {
-            angle2=the2;
-            y2=a*tan(angle2/180*3.1415926);
-        }
-
-
-        cout<<"x1 y1: "<<x1<<" "<<y1<<endl;
-        cout<<"x2 y2: "<<x2<<" "<<y2<<endl;
-
-        door_center_x[0]=(x1+x2)/2+pos_drone.pose.position.x;
-        door_center_y[0]=(y1+y2)/2+pos_drone.pose.position.y;
-        cout<<"door position: "<<door_center_x[0]<<" "<<door_center_y[0]<<endl;
-    }
-    //collision_avoidance(door_center_x[i]+0.5,door_center_y[i]);
-    float abs_distance;
-    abs_distance = sqrt((pos_drone.pose.position.x - door_center_x[0]-0.5) * (pos_drone.pose.position.x - door_center_x[0]-0.5) + (pos_drone.pose.position.y - door_center_y[0]) * (pos_drone.pose.position.y - door_center_y[0]));
-    //cout<<"abs_distance: "<<abs_distance<<endl;
-    cout<<"door position: "<<door_center_x[0]<<" "<<door_center_y[0]<<endl;
-    if(abs_distance < 0.3 )
-    {
-        if(mode_num!=5) reach_door_flag[0]=true;
-        else reach_firedoor_flag=true;
-    }
-
-}
+//原理同上
 void find_fire_center()
 {
     if(!detect_num) return;
@@ -972,6 +882,9 @@ float compute_distance(float x0, float y0, float x1, float y1)
 {
     return sqrt((x0-x1)*(x0-x1)+(y0-y1)*(y0-y1));
 }
+//思路：检测到的图片中心换算出ENU下的坐标，然后插入vector，后续检测到的图片中心坐标与vector中进行对比
+//如果距离全部都大于1m，则push back，如果距离有小于0.1m的就判定识别到的图片已经插入了vector不需要重复插入
+//由于视角的问题，无人机最多看到两个图，因此需要给无人机一个远处的激励，从而加入第三个图坐标。
 void nav_fire(int i)
 {
     if(i!=2)
