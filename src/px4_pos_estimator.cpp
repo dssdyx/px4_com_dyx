@@ -91,7 +91,7 @@ Eigen::Quaterniond q_fcu;
 Eigen::Vector3d Euler_fcu;                                          //无人机当前欧拉角(来自fcu)
 //---------------------------------------发布相关变量--------------------------------------------
 //geometry_msgs::PoseStamped vision;
-geometry_msgs::PoseWithCovarianceStamped vision;
+geometry_msgs::PoseStamped vision;
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>函数声明<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 float get_dt(ros::Time last);                                                        //获取时间间隔
 void printf_info();     
@@ -274,8 +274,8 @@ int main(int argc, char **argv)
 
     // 【发布】无人机位置和偏航角 坐标系 ENU系
     //  本话题要发送飞控(通过mavros_extras/src/plugins/vision_pose_estimate.cpp发送), 对应Mavlink消息为VISION_POSITION_ESTIMATE(#??), 对应的飞控中的uORB消息为vehicle_vision_position.msg 及 vehicle_vision_attitude.msg
-    //ros::Publisher vision_pub = nh.advertise<geometry_msgs::PoseStamped>("/mavros/vision_pose/pose", 100);
-    ros::Publisher vision_pub = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/mavros/vision_pose/pose_cov", 100);
+    ros::Publisher vision_pub = nh.advertise<geometry_msgs::PoseStamped>("/mavros/vision_pose/pose", 100);
+    //ros::Publisher vision_pub = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/mavros/vision_pose/pose_cov", 100);
     ros::Timer pose_pub_timer = nh.createTimer(ros::Duration(1.0/20.0),pose_pub_timer_cb);
     // 频率
     ros::Rate rate(20.0);
@@ -308,58 +308,58 @@ void pose_pub_timer_cb(const ros::TimerEvent& TE)
     //vicon
     if(flag_use_laser_or_vicon == 0)
     {
-        vision.pose.pose.position.x = pos_drone_mocap[0] ;
-        vision.pose.pose.position.y = pos_drone_mocap[1] ;
-        vision.pose.pose.position.z = pos_drone_mocap[2] ;
+        vision.pose.position.x = pos_drone_mocap[0] ;
+        vision.pose.position.y = pos_drone_mocap[1] ;
+        vision.pose.position.z = pos_drone_mocap[2] ;
 
-        vision.pose.pose.orientation.x = q_mocap.x();
-        vision.pose.pose.orientation.y = q_mocap.y();
-        vision.pose.pose.orientation.z = q_mocap.z();
-        vision.pose.pose.orientation.w = q_mocap.w();
+        vision.pose.orientation.x = q_mocap.x();
+        vision.pose.orientation.y = q_mocap.y();
+        vision.pose.orientation.z = q_mocap.z();
+        vision.pose.orientation.w = q_mocap.w();
 
-        vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
+        /*vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
                                    0, 0.01, 0, 0, 0, 0,
                                    0, 0, 10000000000.0, 0, 0, 0,
                                    0, 0, 0, 10000000000.0, 0, 0,
                                    0, 0, 0, 0, 10000000000.0, 0,
-                                   0, 0, 0, 0, 0, 0.05}; //dyx
+                                   0, 0, 0, 0, 0, 0.05}; //dyx*/
 
     }//laser
     else if (flag_use_laser_or_vicon == 1)
     {
-        vision.pose.pose.position.x = pos_drone_laser[0];
-        vision.pose.pose.position.y = pos_drone_laser[1];
-        vision.pose.pose.position.z = pos_drone_laser[2];
+        vision.pose.position.x = pos_drone_laser[0];
+        vision.pose.position.y = pos_drone_laser[1];
+        vision.pose.position.z = pos_drone_laser[2];
 
-        vision.pose.pose.orientation.x = q_laser.x();
-        vision.pose.pose.orientation.y = q_laser.y();
-        vision.pose.pose.orientation.z = q_laser.z();
-        vision.pose.pose.orientation.w = q_laser.w();
+        vision.pose.orientation.x = q_laser.x();
+        vision.pose.orientation.y = q_laser.y();
+        vision.pose.orientation.z = q_laser.z();
+        vision.pose.orientation.w = q_laser.w();
 
-        vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
+        /*vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
                                    0, 0.01, 0, 0, 0, 0,
                                    0, 0, 10000000000.0, 0, 0, 0,
                                    0, 0, 0, 10000000000.0, 0, 0,
                                    0, 0, 0, 0, 10000000000.0, 0,
-                                   0, 0, 0, 0, 0, 0.05}; //dyx
+                                   0, 0, 0, 0, 0, 0.05}; //dyx*/
     }//realsense
     else if (flag_use_laser_or_vicon == 2)
     {
-        vision.pose.pose.position.x = pos_drone_realsense[0];
-        vision.pose.pose.position.y = pos_drone_realsense[1];
-        vision.pose.pose.position.z = pos_drone_realsense[2];
+        vision.pose.position.x = pos_drone_realsense[0];
+        vision.pose.position.y = pos_drone_realsense[1];
+        vision.pose.position.z = pos_drone_realsense[2];
 
-        vision.pose.pose.orientation.x = q_realsense.x();
-        vision.pose.pose.orientation.y = q_realsense.y();
-        vision.pose.pose.orientation.z = q_realsense.z();
-        vision.pose.pose.orientation.w = q_realsense.w();
+        vision.pose.orientation.x = q_realsense.x();
+        vision.pose.orientation.y = q_realsense.y();
+        vision.pose.orientation.z = q_realsense.z();
+        vision.pose.orientation.w = q_realsense.w();
 
-        vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
+        /*vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
                                    0, 0.01, 0, 0, 0, 0,
                                    0, 0, 10000000000.0, 0, 0, 0,
                                    0, 0, 0, 10000000000.0, 0, 0,
                                    0, 0, 0, 0, 10000000000.0, 0,
-                                   0, 0, 0, 0, 0, 0.05}; //dyx
+                                   0, 0, 0, 0, 0, 0.05}; //dyx*/
     }
     vision.header.stamp = TE.current_real;
     ready_for_pub = true;

@@ -243,6 +243,38 @@ target_link_libraries(collision_avoidance_streo
   ${catkin_LIBRARIES}
 )
 
+##
+add_executable(crossing_door_normal
+  src/Application/crossing_door_normal.cpp
+)
+add_dependencies(crossing_door_normal px4_command_gencpp)
+target_link_libraries(crossing_door_normal
+  ${catkin_LIBRARIES}
+)
+
+add_executable(crossing_door_darknet
+  src/Application/crossing_door_darknet.cpp
+)
+add_dependencies(crossing_door_darknet px4_command_gencpp)
+target_link_libraries(crossing_door_darknet
+  ${catkin_LIBRARIES}
+)
+
+add_executable(ABCdemo
+  src/Application/4x4ABCdemo.cpp
+)
+add_dependencies(ABCdemo px4_command_gencpp)
+target_link_libraries(ABCdemo
+  ${catkin_LIBRARIES}
+)
+
+add_executable(firematch
+  src/Application/firematch.cpp
+)
+add_dependencies(firematch px4_command_gencpp)
+target_link_libraries(firematch
+  ${catkin_LIBRARIES}
+)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
