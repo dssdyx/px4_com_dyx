@@ -38,6 +38,7 @@ add_message_files(
   DIRECTORY msg
   FILES
   command.msg
+  command_acc.msg
   ude_log.msg
 )
 
@@ -109,6 +110,48 @@ target_link_libraries(px4_pos_controller
   ${catkin_LIBRARIES}
 )
 
+##dyx
+add_executable(px4_vel_controller
+  src/px4_vel_controller.cpp
+)
+add_dependencies(px4_vel_controller px4_command_gencpp)
+target_link_libraries(px4_vel_controller
+  ${catkin_LIBRARIES}
+)
+
+add_executable(px4_traj_controller
+  src/px4_traj_controller.cpp
+)
+add_dependencies(px4_traj_controller px4_command_gencpp)
+target_link_libraries(px4_traj_controller
+  ${catkin_LIBRARIES}
+)
+
+add_executable(px4_replan_controller
+  src/px4_replan_controller.cpp
+)
+add_dependencies(px4_replan_controller px4_command_gencpp)
+target_link_libraries(px4_replan_controller
+  ${catkin_LIBRARIES}
+)
+
+add_executable(px4_truth_estimator
+  src/px4_truth_estimator.cpp
+)
+add_dependencies(px4_truth_estimator px4_command_gencpp)
+target_link_libraries(px4_truth_estimator
+  ${catkin_LIBRARIES}
+)
+
+add_executable(px4_replan_sender
+  src/px4_replan_sender.cpp
+)
+add_dependencies(px4_replan_sender px4_command_gencpp)
+target_link_libraries(px4_replan_sender
+  ${catkin_LIBRARIES}
+)
+
+
 ##
 add_executable(px4_pos_estimator
   src/px4_pos_estimator.cpp
@@ -141,6 +184,8 @@ add_dependencies(px4_auto_takeoff px4_command_gencpp)
 target_link_libraries(px4_auto_takeoff
   ${catkin_LIBRARIES}
 )
+
+
 
 add_executable(path
   src/path.cpp
@@ -203,6 +248,32 @@ target_link_libraries(Data_log
 )
 
 ###### Application File ##########
+
+add_executable(auto_takeoff
+  src/Application/auto_takeoff.cpp
+)
+add_dependencies(auto_takeoff px4_command_gencpp)
+target_link_libraries(auto_takeoff
+  ${catkin_LIBRARIES}
+)
+
+
+add_executable(acc_auto_takeoff
+  src/Application/acc_auto_takeoff.cpp
+)
+add_dependencies(acc_auto_takeoff px4_command_gencpp)
+target_link_libraries(acc_auto_takeoff
+  ${catkin_LIBRARIES}
+)
+
+add_executable(auto_control
+  src/Application/auto_control.cpp
+)
+add_dependencies(auto_control px4_command_gencpp)
+target_link_libraries(auto_control
+  ${catkin_LIBRARIES}
+)
+
 add_executable(square
   src/Application/square.cpp
 )
@@ -273,6 +344,14 @@ add_executable(firematch
 )
 add_dependencies(firematch px4_command_gencpp)
 target_link_libraries(firematch
+  ${catkin_LIBRARIES}
+)
+
+add_executable(flytwopoints
+  src/Application/flytwopoints.cpp
+)
+add_dependencies(flytwopoints px4_command_gencpp)
+target_link_libraries(flytwopoints
   ${catkin_LIBRARIES}
 )
 

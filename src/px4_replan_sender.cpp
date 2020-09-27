@@ -19,11 +19,14 @@
 #include <ros/ros.h>
 
 #include <command_to_mavros.h>
-#include <px4_command/command.h>
+#include <pos_controller_PID.h>
+#include <px4_command/command_acc.h>
+
 
 #include <Eigen/Eigen>
 
 using namespace std;
+using namespace namespace_PID;
 using namespace namespace_command_to_mavros;
 
 //自定义的Command变量
@@ -33,43 +36,50 @@ enum Command
     Move_ENU,
     Move_Body,
     Hold,
+    Takeoff,
     Land,
-    Disarm,
     Arm,
+    Disarm,
     Failsafe_land,
-    Idle,
-    Takeoff
+    Idle
 };
 
 //Command Now [from upper node]
-px4_command::command Command_Now;                      //无人机当前执行命令
+px4_command::command_acc Command_Now;                      //无人机当前执行命令
 
 //Command Last [from upper node]
-px4_command::command Command_Last;                     //无人机上一条执行命令
+px4_command::command_acc Command_Last;                     //无人机上一条执行命令
+
+Eigen::Vector3d pos_sp(0,0,0);
+Eigen::Vector3d vel_sp(0,0,0);
+Eigen::Vector3d acc_sp(0,0,0);
+
+double yaw_sp = 0;
+double yaw_rate_sp = 0;
+Eigen::Vector3d accel_sp(0,0,0);
+
+
 
 float get_ros_time(ros::Time begin);
 void prinft_command_state();
 
-void Command_cb(const px4_command::command::ConstPtr& msg)
+void Command_cb(const px4_command::command_acc::ConstPtr& msg)
 {
     Command_Now = *msg;
 }
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>主 函 数<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "px4_sender");
+    ros::init(argc, argv, "px4_replan_sender");
     ros::NodeHandle nh("~");
 
-    ros::Subscriber Command_sub = nh.subscribe<px4_command::command>("/px4/command", 10, Command_cb);
+    ros::Subscriber Command_sub = nh.subscribe<px4_command::command_acc>("/px4/command", 10, Command_cb);
 
     // 频率 [50Hz]
     ros::Rate rate(50.0);
 
-    Eigen::Vector3d pos_sp(0,0,0);
-
-    Eigen::Vector3d vel_sp(0,0,0);
-
     command_to_mavros pos_sender;
+    pos_controller_PID pos_sender_pid;
 
     pos_sender.printf_param();
 
@@ -95,7 +105,7 @@ int main(int argc, char **argv)
     // 等待和飞控的连接
     while(ros::ok() && pos_sender.current_state.connected)
     {
-        //local_pos_pub.publish(pose);//dyx
+        local_pos_pub.publish(pose);//dyx
         ros::spinOnce();
         rate.sleep();
         ROS_INFO("Not Connected");
@@ -125,6 +135,8 @@ int main(int argc, char **argv)
 
     // 记录启控时间
     ros::Time begin_time = ros::Time::now();
+    float last_time = get_ros_time(begin_time);
+    float dt = 0;
 
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>主  循  环<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     while(ros::ok())
@@ -133,6 +145,11 @@ int main(int argc, char **argv)
 
 
         float cur_time = get_ros_time(begin_time);
+        dt = cur_time  - last_time;
+
+        dt = constrain_function2(dt, 0.01, 0.03);
+
+        last_time = cur_time;
 
         //pos_sender.prinft_drone_state2(cur_time);
         //prinft_command_state();
@@ -148,25 +165,17 @@ int main(int argc, char **argv)
         {
         case Move_ENU:
 
-            if( Command_Now.sub_mode == 0 )
-            {
-                pos_sp = Eigen::Vector3d(Command_Now.pos_sp[0],Command_Now.pos_sp[1],Command_Now.pos_sp[2]);
+            pos_sp = Eigen::Vector3d(Command_Now.pos_sp[0],Command_Now.pos_sp[1],Command_Now.pos_sp[2]);
+            //vel_sp = Eigen::Vector3d(Command_Now.vel_sp[0],Command_Now.vel_sp[1],Command_Now.vel_sp[2]);
+            //acc_sp = Eigen::Vector3d(Command_Now.acc_sp[0],Command_Now.acc_sp[1],Command_Now.acc_sp[2]);
+            yaw_sp = Command_Now.yaw_sp;
+            //yaw_rate_sp = Command_Now.yaw_rate_sp;
 
-                pos_sender.send_pos_setpoint(pos_sp, Command_Now.yaw_sp);
-            }
-            else if( Command_Now.sub_mode == 3 )
-            {
-                vel_sp = Eigen::Vector3d(Command_Now.vel_sp[0],Command_Now.vel_sp[1],Command_Now.vel_sp[2]);
+            //pos_sender.send_pos_vel_acc_setpoint(pos_sp,vel_sp,acc_sp,yaw_sp,yaw_rate_sp);
+            pos_sender.send_pos_setpoint(pos_sp,yaw_sp);
+            //pos_sender.send_vel_setpoint(vel_sp,yaw_sp);
+            //pos_sender.send_accel_setpoint(acc_sp,yaw_sp);
 
-                pos_sender.send_vel_setpoint(vel_sp, Command_Now.yaw_sp);
-            }
-            else if( Command_Now.sub_mode == 2 )
-            {
-                pos_sp = Eigen::Vector3d(Command_Now.pos_sp[0],Command_Now.pos_sp[1],Command_Now.pos_sp[2]);
-                vel_sp = Eigen::Vector3d(Command_Now.vel_sp[0],Command_Now.vel_sp[1],Command_Now.vel_sp[2]);
-
-                pos_sender.send_vel_xy_pos_z_setpoint(pos_sp,vel_sp, Command_Now.yaw_sp);
-            }
 
             break;
 
@@ -180,8 +189,19 @@ int main(int argc, char **argv)
 
         case Hold:
 
-            pos_sender.loiter();
+            //pos_sender.loiter();
+            cout<<"Hold received！"<<endl;
+            if (Command_Last.command != Hold)
+            {
+                pos_sender.Hold_position = Eigen::Vector3d(pos_sender.pos_drone_fcu[0],pos_sender.pos_drone_fcu[1],pos_sender.pos_drone_fcu[2]);
+                pos_sender.Hold_yaw =pos_sender.Euler_fcu[2]* 180/M_PI;
+                pos_sp = pos_sender.Hold_position;
+                vel_sp = Eigen::Vector3d(0,0,0);
+                yaw_sp = pos_sender.Hold_yaw;
+            }
 
+            //pos_sender.send_vel_xy_pos_z_setpoint(pos_sp,vel_sp,yaw_sp);
+            pos_sender.send_pos_setpoint(pos_sp,yaw_sp);
             break;
 
 
@@ -225,13 +245,19 @@ int main(int argc, char **argv)
         case Takeoff:
             pos_sender.mode_cmd.request.custom_mode = "OFFBOARD";
             pos_sender.set_mode_client.call(pos_sender.mode_cmd);
+            cout<<"Takeoff receieved!"<<endl;
 
             pos_sp = Eigen::Vector3d(pos_sender.Takeoff_position[0],pos_sender.Takeoff_position[1],pos_sender.Takeoff_position[2]+pos_sender.Takeoff_height);
-
-            pos_sender.send_pos_setpoint(pos_sp, Command_Now.yaw_sp);
-
+            vel_sp = Eigen::Vector3d(0,0,0);
+            yaw_sp = pos_sender.Takeoff_yaw* 180/M_PI;
+            pos_sender.send_pos_setpoint(pos_sp, yaw_sp);
+            //pos_sender.send_vel_xy_pos_z_setpoint(pos_sp,vel_sp,yaw_sp);
+            //accel_sp = pos_sender_pid.pos_controller(pos_sender.pos_drone_fcu, pos_sender.vel_drone_fcu, pos_sp, vel_sp, 2, dt);
+            //pos_sender.send_accel_setpoint(accel_sp, yaw_sp);
             break;
         case Arm:
+            //cout<<"Arm receieved!"<<endl;
+            //if(pos_sender.current_state.mode != "OFFBOARD") break;
             if(!pos_sender.current_state.armed)
             {
                  pos_sender.arm_cmd.request.value = true;

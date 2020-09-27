@@ -69,6 +69,7 @@ float door_center_x[2];                                         //前两道门�
 float door_center_y[2];                                         //前两道门的y坐标
 bool reach_door_flag[2];                                        //到达前两道门的标志
 int mode_num;                                                   //模式
+bool sign[2];                                                   //激励的标志
 //--------------------------------------------目标检测，识别降落用-------------------------------------------------
 int detect_num;                                                  //darknet发布的检测到的物体数目
 darknet_ros_msgs::BoundingBox darknet_box;                       //用于模式4只用识别一张图的情况
@@ -333,6 +334,7 @@ int main(int argc, char **argv)
         Command_now.command = Move_ENU;     //机体系下移动
         Command_now.comid = comid;
         comid++;
+
         Command_now.sub_mode = 2; // xy 速度控制模式 z 位置控制模式
         Command_now.vel_sp[0] =  vel_sp_ENU[0];
         Command_now.vel_sp[1] =  vel_sp_ENU[1];  //ENU frame
@@ -729,8 +731,22 @@ void nav_fire(int i)
                 flag_land=1;
             }
         }
-        else
+        else if(!sign[1])
+        {
             collision_avoidance(fire_target_x[1]-1,fire_target_y[1]-1);
+            if(compute_distance(pos_drone.pose.position.x,pos_drone.pose.position.y,fire_target_x[1]-1,fire_target_y[1]-1)<0.2)
+            {
+                sign[1]=true;
+            }
+        }
+        else if(!sign[0])
+        {
+            collision_avoidance(fire_target_x[0]-1,fire_target_y[0]-1);
+            if(compute_distance(pos_drone.pose.position.x,pos_drone.pose.position.y,fire_target_x[0]-1,fire_target_y[0]-1)<0.2)
+            {
+                sign[0]=true;
+            }
+        }
 
 
     }

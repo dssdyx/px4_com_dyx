@@ -16,8 +16,7 @@
 #include <command_to_mavros.h>
 #include <px4_command/command.h>
 #include <pos_controller_PID.h>
-#include <pos_controller_UDE.h>
-#include <pos_controller_passivity.h>
+
 
 //*************************//dyxtest
 #include <mavros_msgs/SetMode.h>
@@ -30,8 +29,7 @@ using namespace std;
 
 using namespace namespace_command_to_mavros;
 using namespace namespace_PID;
-using namespace namespace_UDE;
-using namespace namespace_passivity;
+
 
 //自定义的Command变量
 //相应的命令分别为 移动(惯性系ENU)，移动(机体系)，悬停，降落，上锁，紧急降落，待机
@@ -70,7 +68,7 @@ void Command_cb(const px4_command::command::ConstPtr& msg)
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>主 函 数<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "px4_pos_controller");
+    ros::init(argc, argv, "px4_vel_controller");
     ros::NodeHandle nh("~");
 
     ros::Subscriber Command_sub = nh.subscribe<px4_command::command>("/px4/command", 10, Command_cb);
@@ -92,18 +90,11 @@ int main(int argc, char **argv)
     pos_controller.show_geo_fence();
 
     pos_controller_PID pos_controller_pid;
-    pos_controller_UDE pos_controller_ude;
-    pos_controller_passivity pos_controller_ps;
+
 
     if(switch_ude == 0)
     {
         pos_controller_pid.printf_param();
-    }else if(switch_ude == 1)
-    {
-        pos_controller_ude.printf_param();
-    }else if(switch_ude == 2)
-    {
-        pos_controller_ps.printf_param();
     }
 
     /*
@@ -158,17 +149,7 @@ int main(int argc, char **argv)
 
     Command_Now.comid = 0;
     Command_Now.command = Idle;
-    /*****
-    Command_Now.sub_mode = 0;
-    Command_Now.pos_sp[0] = pos_controller.Takeoff_position[0];
-    Command_Now.pos_sp[1] = pos_controller.Takeoff_position[1];
-    Command_Now.pos_sp[2] = pos_controller.Takeoff_position[2] + pos_controller.Takeoff_height;
-    Command_Now.vel_sp[0] = 0;
-    Command_Now.vel_sp[1] = 0;
-    Command_Now.vel_sp[2] = 0;
-    Command_Now.yaw_sp = 0;
-    Command_Now.yaw_rate_sp = 0;
-    */
+
     // 记录启控时间
     ros::Time begin_time = ros::Time::now();
     float last_time = get_ros_time(begin_time);
@@ -205,12 +186,6 @@ int main(int argc, char **argv)
         if(switch_ude == 0)
         {
             //pos_controller_pid.printf_result();
-        }else if(switch_ude == 1)
-        {
-            pos_controller_ude.printf_result();
-        }else if(switch_ude == 2)
-        {
-            pos_controller_ps.printf_result();
         }
 
 
@@ -225,19 +200,17 @@ int main(int argc, char **argv)
         case Move_ENU:
             pos_sp = Eigen::Vector3d(Command_Now.pos_sp[0],Command_Now.pos_sp[1],Command_Now.pos_sp[2]);
             vel_sp = Eigen::Vector3d(Command_Now.vel_sp[0],Command_Now.vel_sp[1],Command_Now.vel_sp[2]);
+            yaw_sp = Command_Now.yaw_sp;
 
             if(switch_ude == 0)
             {
                 accel_sp = pos_controller_pid.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, vel_sp, Command_Now.sub_mode, dt);
-            }else if(switch_ude == 1)
-            {
-                accel_sp = pos_controller_ude.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, dt);
-            }else if(switch_ude == 2)
-            {
-                accel_sp = pos_controller_ps.pos_controller(pos_controller.pos_drone_fcu, pos_sp, dt);
+                vel_sp = pos_controller_pid.vel_setpoint;
             }
 
-            pos_controller.send_accel_setpoint(accel_sp, Command_Now.yaw_sp);
+            //pos_controller.send_accel_setpoint(accel_sp, Command_Now.yaw_sp);
+            pos_controller.send_vel_setpoint(vel_sp,yaw_sp);
+            cout<<"vel_z_sp: "<<vel_sp(2)<<endl;
 
             break;
 
@@ -283,14 +256,7 @@ int main(int argc, char **argv)
             if(switch_ude == 0)
             {
                 accel_sp = pos_controller_pid.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, vel_sp, Command_Now.sub_mode, dt);
-            }else if(switch_ude == 1)
-            {
-                accel_sp = pos_controller_ude.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, dt);
-            }else if(switch_ude == 2)
-            {
-                accel_sp = pos_controller_ps.pos_controller(pos_controller.pos_drone_fcu, pos_sp, dt);
             }
-
             pos_controller.send_accel_setpoint(accel_sp, yaw_sp);
 
             break;
@@ -304,65 +270,14 @@ int main(int argc, char **argv)
                 yaw_sp = pos_controller.Hold_yaw;
             }
 
-            if(switch_ude == 0)
-            {
-                accel_sp = pos_controller_pid.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_controller.Hold_position, vel_sp, Command_Now.sub_mode, dt);
-            }else if(switch_ude == 1)
-            {
-                accel_sp = pos_controller_ude.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_controller.Hold_position, dt);
-            }else if(switch_ude == 2)
-            {
-                accel_sp = pos_controller_ps.pos_controller(pos_controller.pos_drone_fcu, pos_controller.Hold_position, dt);
-            }
 
-            pos_controller.send_accel_setpoint(accel_sp, pos_controller.Hold_yaw);
-
+            pos_controller.send_pos_setpoint(pos_sp,yaw_sp);
             break;
 
 
+
         case Land:
-            if (Command_Last.command != Land)
-            {
-                pos_sp = Eigen::Vector3d(pos_controller.pos_drone_fcu[0],pos_controller.pos_drone_fcu[1],pos_controller.Takeoff_position[2]);
-                yaw_sp = pos_controller.Euler_fcu[2]* 180/M_PI;
-            }
-
-            //如果距离起飞高度小于10厘米，则直接上锁并切换为手动模式；
-            if(abs(pos_controller.pos_drone_fcu[2] - pos_controller.Takeoff_position[2]) < (0.1))
-            {
-                if(pos_controller.current_state.mode == "OFFBOARD")
-                {
-                    pos_controller.mode_cmd.request.custom_mode = "MANUAL";
-                    pos_controller.set_mode_client.call(pos_controller.mode_cmd);
-                }
-
-                if(pos_controller.current_state.armed)
-                {
-                    pos_controller.arm_cmd.request.value = false;
-                    pos_controller.arming_client.call(pos_controller.arm_cmd);
-
-                }
-
-                if (pos_controller.arm_cmd.response.success)
-                {
-                    cout<<"Disarm successfully!"<<endl;
-                }
-            }else
-            {
-
-                if(switch_ude == 0)
-                {
-                    accel_sp = pos_controller_pid.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, vel_sp, 0b00, dt);
-                }else if(switch_ude == 1)
-                {
-                    accel_sp = pos_controller_ude.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, dt);
-                }else if(switch_ude == 2)
-                {
-                    accel_sp = pos_controller_ps.pos_controller(pos_controller.pos_drone_fcu, pos_sp, dt);
-                }
-
-                pos_controller.send_accel_setpoint(accel_sp, yaw_sp);
-            }
+            pos_controller.land();
 
             break;
 
@@ -408,41 +323,12 @@ int main(int argc, char **argv)
             pos_controller.mode_cmd.request.custom_mode = "OFFBOARD";
             pos_controller.set_mode_client.call(pos_controller.mode_cmd);
             if(pos_controller.current_state.mode== "OFFBOARD") cout<<"10"<<endl;
-            //cout<<"takeoff11"<<endl;
 
             pos_sp = Eigen::Vector3d(pos_controller.Takeoff_position[0],pos_controller.Takeoff_position[1],pos_controller.Takeoff_position[2]+pos_controller.Takeoff_height);
-            cout<<"takeoff height: "<<pos_sp(2)<<endl;
-            vel_sp = Eigen::Vector3d(0.0,0.0,0.0);
 
-            if(switch_ude == 0)
-            {
-                accel_sp = pos_controller_pid.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, vel_sp, Command_Now.sub_mode, dt);
-            }else if(switch_ude == 1)
-            {
-                accel_sp = pos_controller_ude.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, dt);
-            }else if(switch_ude == 2)
-            {
-                accel_sp = pos_controller_ps.pos_controller(pos_controller.pos_drone_fcu, pos_sp, dt);
-            }
+            yaw_sp = pos_controller.Takeoff_yaw* 180/M_PI;
+            pos_controller.send_pos_setpoint(pos_sp, yaw_sp);
 
-            pos_controller.send_accel_setpoint(accel_sp, Command_Now.yaw_sp);
-            /*
-            mavros_msgs::PositionTarget pos_setpoint;
-
-            pos_setpoint.type_mask = 0b101111111000;
-            pos_setpoint.header.stamp = ros::Time::now();
-            pos_setpoint.coordinate_frame = 1;
-
-
-            //pos_setpoint.coordinate_frame = 1;
-
-            pos_setpoint.position.x = pos_sp[0];
-            pos_setpoint.position.y = pos_sp[1];
-            pos_setpoint.position.z = pos_sp[2];
-
-            pos_setpoint.yaw = yaw_sp * M_PI/180;
-
-            pos_controller.setpoint_raw_local_pub.publish(pos_setpoint);*/
 
             break;
         }

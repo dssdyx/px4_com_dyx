@@ -66,6 +66,10 @@ int flag_use_laser_or_vicon;                               //0:使用mocap数据
 Eigen::Vector3d pos_drone_mocap;                          //无人机当前位置 (vicon)
 Eigen::Quaterniond q_mocap;
 Eigen::Vector3d Euler_mocap;                              //无人机当前姿态 (vicon)
+//_______________________________________gazebo自带定位-----------------------------------------
+Eigen::Vector3d pos_drone_gazebo;                          //无人机当前位置 (laser)
+Eigen::Quaterniond q_gazebo;
+Eigen::Vector3d Euler_gazebo;
 //---------------------------------------laser定位相关------------------------------------------
 Eigen::Vector3d pos_drone_laser;                          //无人机当前位置 (laser)
 Eigen::Quaterniond q_laser;
@@ -82,11 +86,6 @@ Eigen::Vector3d  Euler_realsense;
 
 geometry_msgs::TransformStamped realsense;
 geometry_msgs::TransformStamped realsense_last;
-//---------------------------------------VINS定位相关------------------------------------------
-Eigen::Vector3d pos_drone_VINS;                          //无人机当前位置 (VINS)
-Eigen::Quaterniond q_VINS;
-Eigen::Vector3d Euler_VINS;                              //无人机当前姿态(VINS)
-
 
 //---------------------------------------无人机位置及速度--------------------------------------------
 Eigen::Vector3d pos_drone_fcu;                           //无人机当前位置 (来自fcu)
@@ -212,7 +211,12 @@ void optitrack_cb(const geometry_msgs::PoseStamped::ConstPtr& msg)
     Euler_mocap = quaternion_to_euler(q_mocap);
 
 }
-
+void gazebo_cb(const nav_msgs::OdometryConstPtr& msg)
+{
+    pos_drone_gazebo = Eigen::Vector3d(msg->pose.pose.position.x,msg->pose.pose.position.y,msg->pose.pose.position.z);
+    q_gazebo = Eigen::Quaterniond(msg->pose.pose.orientation.w,msg->pose.pose.orientation.x,msg->pose.pose.orientation.y,msg->pose.pose.orientation.z);
+    Euler_gazebo = quaternion_to_euler(q_gazebo);
+}
 void pos_cb(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
     // Read the Drone Position from the Mavros Package [Frame: ENU]
@@ -226,14 +230,6 @@ void pos_cb(const geometry_msgs::PoseStamped::ConstPtr &msg)
 
     //Transform the Quaternion to Euler Angles
     Euler_fcu = quaternion_to_euler(q_fcu);
-}
-void VINS_cb(const nav_msgs::Odometry::ConstPtr &msg)
-{
-    Eigen::Vector3d pos_drone(msg->pose.pose.position.x,msg->pose.pose.position.y,msg->pose.pose.position.z);
-    pos_drone_VINS = pos_drone;
-    Eigen::Quaterniond q_drone(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
-    q_VINS = q_drone;
-    Euler_VINS = quaternion_to_euler(q_VINS);
 }
 
 void vel_cb(const geometry_msgs::TwistStamped::ConstPtr &msg)
@@ -255,7 +251,7 @@ void euler_cb(const sensor_msgs::Imu::ConstPtr& msg)
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>主 函 数<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "px4_pos_estimator");
+    ros::init(argc, argv, "px4_truth_estimator");
     ros::NodeHandle nh("~");
 
     //读取参数表中的参数
@@ -267,14 +263,14 @@ int main(int argc, char **argv)
     // 【订阅】realsense估计位置
     ros::Subscriber realsense_sub = nh.subscribe<tf2_msgs::TFMessage>("/tf", 1000, realsense_cb);
 
-    //【订阅】VINS数据
-    ros::Subscriber VINS_sub = nh.subscribe<nav_msgs::Odometry>("/VIO/odom", 10, VINS_cb);
-
     // 【订阅】超声波的数据
     ros::Subscriber sonic_sub = nh.subscribe<std_msgs::UInt16>("/sonic", 100, sonic_cb);
 
     // 【订阅】tf mini的数据
     ros::Subscriber tfmini_sub = nh.subscribe<sensor_msgs::Range>("/TFmini", 100, tfmini_cb);
+
+    //gazebo odom 订阅
+    ros::Subscriber Gazebo_sub = nh.subscribe<nav_msgs::Odometry>("/ground_truth/state",10,gazebo_cb);
 
     // 【订阅】optitrack估计位置
     ros::Subscriber optitrack_sub = nh.subscribe<geometry_msgs::PoseStamped>("/vrpn_client_node/UAV/pose", 1000, optitrack_cb);
@@ -343,14 +339,14 @@ void pose_pub_timer_cb(const ros::TimerEvent& TE)
     }//laser
     else if (flag_use_laser_or_vicon == 1)
     {
-        vision.pose.position.x = pos_drone_laser[0];
-        vision.pose.position.y = pos_drone_laser[1];
-        vision.pose.position.z = pos_drone_laser[2];
+        vision.pose.position.x = pos_drone_gazebo[0];
+        vision.pose.position.y = pos_drone_gazebo[1];
+        vision.pose.position.z = pos_drone_gazebo[2];
 
-        vision.pose.orientation.x = q_laser.x();
-        vision.pose.orientation.y = q_laser.y();
-        vision.pose.orientation.z = q_laser.z();
-        vision.pose.orientation.w = q_laser.w();
+        vision.pose.orientation.x = q_gazebo.x();
+        vision.pose.orientation.y = q_gazebo.y();
+        vision.pose.orientation.z = q_gazebo.z();
+        vision.pose.orientation.w = q_gazebo.w();
 
         /*vision.pose.covariance = { 0.01, 0, 0, 0, 0, 0,
                                    0, 0.01, 0, 0, 0, 0,
@@ -376,17 +372,6 @@ void pose_pub_timer_cb(const ros::TimerEvent& TE)
                                    0, 0, 0, 10000000000.0, 0, 0,
                                    0, 0, 0, 0, 10000000000.0, 0,
                                    0, 0, 0, 0, 0, 0.05}; //dyx*/
-    }//VINS
-    else if (flag_use_laser_or_vicon == 3)
-    {
-        vision.pose.position.x = pos_drone_VINS[0];
-        vision.pose.position.y = pos_drone_VINS[1];
-        vision.pose.position.z = pos_drone_VINS[2];
-
-        vision.pose.orientation.x = q_VINS.x();
-        vision.pose.orientation.y = q_VINS.y();
-        vision.pose.orientation.z = q_VINS.z();
-        vision.pose.orientation.w = q_VINS.w();
     }
     vision.header.stamp = TE.current_real;
     ready_for_pub = true;
@@ -426,18 +411,13 @@ void printf_info()
     }else if(flag_use_laser_or_vicon == 1)
     {
         cout <<">>>>>>>>>>>>>>>>>>>>>>>>Laser Info [ENU Frame]<<<<<<<<<<<<<<<<<<<<<<<<<" <<endl;
-        cout << "Pos_laser [X Y Z] : " << pos_drone_laser[0] << " [ m ] "<< pos_drone_laser[1] <<" [ m ] "<< pos_drone_laser[2] <<" [ m ] "<<endl;
-        cout << "Euler_vlaser[Yaw] : " << Euler_laser[2] * 180/M_PI<<" [deg]  "<<endl;
+        cout << "Pos_gazebo [X Y Z] : " << pos_drone_gazebo[0] << " [ m ] "<< pos_drone_gazebo[1] <<" [ m ] "<< pos_drone_gazebo[2] <<" [ m ] "<<endl;
+        cout << "Euler_gazebo[Yaw] : " << Euler_gazebo[2] * 180/M_PI<<" [deg]  "<<endl;
     }else if(flag_use_laser_or_vicon == 2)
     {
         cout <<">>>>>>>>>>>>>>>>>>>>>>>>Realsense Info [ENU Frame]<<<<<<<<<<<<<<<<<<<<<<<<<" <<endl;
         cout << "Pos_realsense [X Y Z] : " << pos_drone_realsense[0] << " [ m ] "<< pos_drone_realsense[1] <<" [ m ] "<< pos_drone_realsense[2] <<" [ m ] "<<endl;
         cout << "Euler_vrealsense[Yaw] : " << Euler_realsense[2] * 180/M_PI<<" [deg]  "<<endl;
-    }else if(flag_use_laser_or_vicon == 3)
-    {
-        cout <<">>>>>>>>>>>>>>>>>>>>>>>>Realsense Info [ENU Frame]<<<<<<<<<<<<<<<<<<<<<<<<<" <<endl;
-        cout << "Pos_VINS [X Y Z] : " << pos_drone_VINS[0] << " [ m ] "<< pos_drone_VINS[1] <<" [ m ] "<< pos_drone_VINS[2] <<" [ m ] "<<endl;
-        cout << "Euler_VINS[Yaw] : " << Euler_VINS[2] * 180/M_PI<<" [deg]  "<<endl;
     }
         cout <<">>>>>>>>>>>>>>>>>>>>>>>>FCU Info [ENU Frame]<<<<<<<<<<<<<<<<<<<<<<<<<<<" <<endl;
         cout << "Pos_fcu [X Y Z] : " << pos_drone_fcu[0] << " [ m ] "<< pos_drone_fcu[1] <<" [ m ] "<< pos_drone_fcu[2] <<" [ m ] "<<endl;

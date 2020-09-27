@@ -306,7 +306,14 @@ void pos_controller_PID::_velocityController()
     if(flag_offboard == 0)
     {
         thurst_int = Eigen::Vector3d(0.0,0.0,0.0);
+    //thurst_int(2) =0.0;
     }
+    cout<<"thust in z: "<<thrust_sp(2)<<endl;
+    cout<<"thrustint z: "<<thurst_int(2)<<endl;
+    cout<<"delta height "<<pos_drone(2)-1.3<<endl;
+    cout<<"vel_setpoint_z: "<<vel_setpoint(2)<<endl;
+    cout<<"vel_current__z: "<<vel_drone(2)<<endl;
+
 }
 
 Eigen::Vector3d pos_controller_PID::cal_vel_error_deriv(Eigen::Vector3d error_now)

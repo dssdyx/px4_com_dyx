@@ -14,7 +14,7 @@
 #include <ros/ros.h>
 
 #include <command_to_mavros.h>
-#include <px4_command/command.h>
+#include <px4_command/command_acc.h>
 #include <pos_controller_PID.h>
 #include <pos_controller_UDE.h>
 #include <pos_controller_passivity.h>
@@ -50,30 +50,33 @@ enum Command
 
 Eigen::Vector3d pos_sp(0,0,0);
 Eigen::Vector3d vel_sp(0,0,0);
+Eigen::Vector3d acc_sp(0,0,0);
+
 double yaw_sp = 0;
+double yaw_rate_sp = 0;
 Eigen::Vector3d accel_sp(0,0,0);
 
 //Command Now [from upper node]
-px4_command::command Command_Now;                      //无人机当前执行命令
+px4_command::command_acc Command_Now;                      //无人机当前执行命令
 
 //Command Last [from upper node]
-px4_command::command Command_Last;                     //无人机上一条执行命令
+px4_command::command_acc Command_Last;                     //无人机上一条执行命令
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>函数声明<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 float get_ros_time(ros::Time begin);
 void prinft_command_state();
 void rotation_yaw(float yaw_angle, float input[2], float output[2]);
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>回调函数<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-void Command_cb(const px4_command::command::ConstPtr& msg)
+void Command_cb(const px4_command::command_acc::ConstPtr& msg)
 {
     Command_Now = *msg;
 }
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>主 函 数<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "px4_pos_controller");
+    ros::init(argc, argv, "px4_replan_controller");
     ros::NodeHandle nh("~");
 
-    ros::Subscriber Command_sub = nh.subscribe<px4_command::command>("/px4/command", 10, Command_cb);
+    ros::Subscriber Command_sub = nh.subscribe<px4_command::command_acc>("/px4/command", 10, Command_cb);
 
     ////dyxtest
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local", 10);
@@ -133,7 +136,7 @@ int main(int argc, char **argv)
    geometry_msgs::PoseStamped pose;
    pose.pose.position.x = 0;
    pose.pose.position.y = 0;
-   pose.pose.position.z = 2;
+   pose.pose.position.z = 1;
 
     // 先读取一些飞控的数据
     int i =0;
@@ -223,21 +226,16 @@ int main(int argc, char **argv)
         switch (Command_Now.command)
         {
         case Move_ENU:
+            pos_controller.mode_cmd.request.custom_mode = "OFFBOARD";
+            pos_controller.set_mode_client.call(pos_controller.mode_cmd);
+
             pos_sp = Eigen::Vector3d(Command_Now.pos_sp[0],Command_Now.pos_sp[1],Command_Now.pos_sp[2]);
             vel_sp = Eigen::Vector3d(Command_Now.vel_sp[0],Command_Now.vel_sp[1],Command_Now.vel_sp[2]);
+            acc_sp = Eigen::Vector3d(Command_Now.acc_sp[0],Command_Now.acc_sp[1],Command_Now.acc_sp[2]);
+            yaw_sp = Command_Now.yaw_sp;
+            yaw_rate_sp = Command_Now.yaw_rate_sp;
 
-            if(switch_ude == 0)
-            {
-                accel_sp = pos_controller_pid.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, vel_sp, Command_Now.sub_mode, dt);
-            }else if(switch_ude == 1)
-            {
-                accel_sp = pos_controller_ude.pos_controller(pos_controller.pos_drone_fcu, pos_controller.vel_drone_fcu, pos_sp, dt);
-            }else if(switch_ude == 2)
-            {
-                accel_sp = pos_controller_ps.pos_controller(pos_controller.pos_drone_fcu, pos_sp, dt);
-            }
-
-            pos_controller.send_accel_setpoint(accel_sp, Command_Now.yaw_sp);
+            pos_controller.send_pos_vel_acc_setpoint(pos_sp,vel_sp,acc_sp,yaw_sp,yaw_rate_sp);
 
             break;
 
@@ -408,7 +406,7 @@ int main(int argc, char **argv)
             pos_controller.mode_cmd.request.custom_mode = "OFFBOARD";
             pos_controller.set_mode_client.call(pos_controller.mode_cmd);
             if(pos_controller.current_state.mode== "OFFBOARD") cout<<"10"<<endl;
-            //cout<<"takeoff11"<<endl;
+            cout<<"takeoff11"<<endl;
 
             pos_sp = Eigen::Vector3d(pos_controller.Takeoff_position[0],pos_controller.Takeoff_position[1],pos_controller.Takeoff_position[2]+pos_controller.Takeoff_height);
             cout<<"takeoff height: "<<pos_sp(2)<<endl;

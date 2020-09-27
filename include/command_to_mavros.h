@@ -63,6 +63,7 @@ class command_to_mavros
         Thrust_target           = 0.0;
 
         Takeoff_position        = Eigen::Vector3d(0.0,0.0,0.0);
+        Takeoff_yaw             = 0.0;
         Hold_position           = Eigen::Vector3d(0.0,0.0,0.0);
         Hold_yaw                = 0.0;
         type_mask_target        = 0;
@@ -106,6 +107,7 @@ class command_to_mavros
 
     //Takeoff Position of the Drone
     Eigen::Vector3d Takeoff_position;
+    double Takeoff_yaw;
 
     //Hold Position of the Drone (For hold mode in command.msg)
     Eigen::Vector3d Hold_position;
@@ -165,6 +167,7 @@ class command_to_mavros
     void set_takeoff_position()
     {
         Takeoff_position = pos_drone_fcu;
+        Takeoff_yaw = Euler_fcu[2];
     }
 
     //Takeoff to the default altitude, pls change the param in PX4: MIS_TAKEOFF_ALT
@@ -186,11 +189,20 @@ class command_to_mavros
     //Send vel_setpoint and yaw_setpoint in ENU frame to PX4
     void send_vel_setpoint(Eigen::Vector3d vel_sp, float yaw_sp);
 
+    //Send vel_setpoint in x,y pos_setpoint in z and yaw_setpoint in ENU frame to PX4
+    void send_vel_xy_pos_z_setpoint(Eigen::Vector3d pos_sp,Eigen::Vector3d vel_sp,float yaw_sp);
+
     //Send pos_setpoint and yaw_setpoint in body frame to PX4
     void send_vel_setpoint_body(Eigen::Vector3d vel_sp, float yaw_sp);
 
     //Send accel_setpoint and yaw_setpoint in ENU frame to PX4
     void send_accel_setpoint(Eigen::Vector3d accel_sp, float yaw_sp);
+
+    //dyx send pos,vel,yaw and yaw rate setpoint in ENU frame to PX4
+    void send_pos_vel_setpoint(Eigen::Vector3d pos_sp,Eigen::Vector3d vel_sp, float yaw_sp,float yaw_rate_sp);
+
+    //dyx send pos,vel,acc,yaw and yaw rate setpoint in ENU frame to PX4
+    void send_pos_vel_acc_setpoint(Eigen::Vector3d pos_sp,Eigen::Vector3d vel_sp,Eigen::Vector3d acc_sp, float yaw_sp,float yaw_rate_sp);
 
     //Send actuator_setpoint to PX4[Not recommanded. Because the high delay between the onboard computer and Pixhawk]
     void send_actuator_setpoint(Eigen::Vector4d actuator_sp);
@@ -209,6 +221,7 @@ class command_to_mavros
 
     //printf the geo fence
     void show_geo_fence();
+    ros::Publisher setpoint_raw_local_pub;
 
     private:
 
@@ -220,7 +233,7 @@ class command_to_mavros
         ros::Subscriber attitude_target_sub;
         ros::Subscriber position_target_sub;
         ros::Subscriber actuator_target_sub;
-        ros::Publisher setpoint_raw_local_pub;
+        //ros::Publisher setpoint_raw_local_pub;
         ros::Publisher actuator_setpoint_pub;
 
         void state_cb(const mavros_msgs::State::ConstPtr &msg)
@@ -399,6 +412,22 @@ void command_to_mavros::send_vel_setpoint(Eigen::Vector3d vel_sp, float yaw_sp)
 
     setpoint_raw_local_pub.publish(pos_setpoint);
 }
+void command_to_mavros::send_vel_xy_pos_z_setpoint(Eigen::Vector3d pos_sp, Eigen::Vector3d vel_sp, float yaw_sp)
+{
+    mavros_msgs::PositionTarget setpoint;
+
+    setpoint.type_mask = 0b100111100011;
+
+    setpoint.coordinate_frame = 1;
+
+    setpoint.velocity.x = vel_sp[0];
+    setpoint.velocity.y = vel_sp[1];
+    setpoint.position.z = pos_sp[2];
+
+    setpoint.yaw = yaw_sp * M_PI/180;
+
+    setpoint_raw_local_pub.publish(setpoint);
+}
 
 void command_to_mavros::send_vel_setpoint_body(Eigen::Vector3d vel_sp, float yaw_sp)
 {
@@ -424,8 +453,11 @@ void command_to_mavros::send_accel_setpoint(Eigen::Vector3d accel_sp, float yaw_
     mavros_msgs::PositionTarget pos_setpoint;
 
     pos_setpoint.type_mask = 0b100000111111;
+    pos_setpoint.header.stamp = ros::Time::now();
+    pos_setpoint.coordinate_frame = 8;
 
-    pos_setpoint.coordinate_frame = 1;
+
+    //pos_setpoint.coordinate_frame = 1;
 
     pos_setpoint.acceleration_or_force.x = accel_sp[0];
     pos_setpoint.acceleration_or_force.y = accel_sp[1];
@@ -434,9 +466,59 @@ void command_to_mavros::send_accel_setpoint(Eigen::Vector3d accel_sp, float yaw_
     pos_setpoint.yaw = yaw_sp * M_PI/180;
 
     setpoint_raw_local_pub.publish(pos_setpoint);
+    cout<<"coor: "<<pos_setpoint.coordinate_frame<<endl;
 }
 
+//dyx
+void command_to_mavros::send_pos_vel_setpoint(Eigen::Vector3d pos_sp,Eigen::Vector3d vel_sp, float yaw_sp,float yaw_rate_sp)
+{
+    mavros_msgs::PositionTarget all_setpoint;
 
+    all_setpoint.type_mask = 0b000111000000;
+
+    all_setpoint.coordinate_frame = 1;
+
+    all_setpoint.position.x = pos_sp[0];
+    all_setpoint.position.y = pos_sp[1];
+    all_setpoint.position.z = pos_sp[2];
+
+    all_setpoint.velocity.x = vel_sp[0];
+    all_setpoint.velocity.y = vel_sp[1];
+    all_setpoint.velocity.z = vel_sp[2];
+
+    all_setpoint.yaw = yaw_sp * M_PI/180;
+    all_setpoint.yaw_rate = yaw_rate_sp * M_PI/180;
+
+
+    setpoint_raw_local_pub.publish(all_setpoint);
+}
+
+void command_to_mavros::send_pos_vel_acc_setpoint(Eigen::Vector3d pos_sp,Eigen::Vector3d vel_sp, Eigen::Vector3d acc_sp,float yaw_sp,float yaw_rate_sp)
+{
+    mavros_msgs::PositionTarget all_setpoint;
+
+    all_setpoint.type_mask = 0b000000000000;
+
+    all_setpoint.coordinate_frame = 1;
+
+    all_setpoint.position.x = pos_sp[0];
+    all_setpoint.position.y = pos_sp[1];
+    all_setpoint.position.z = pos_sp[2];
+
+    all_setpoint.velocity.x = vel_sp[0];
+    all_setpoint.velocity.y = vel_sp[1];
+    all_setpoint.velocity.z = vel_sp[2];
+
+    all_setpoint.acceleration_or_force.x = acc_sp[0];
+    all_setpoint.acceleration_or_force.y = acc_sp[1];
+    all_setpoint.acceleration_or_force.z = acc_sp[2];
+
+    all_setpoint.yaw = yaw_sp * M_PI/180;
+    all_setpoint.yaw_rate = yaw_rate_sp * M_PI/180;
+
+
+    setpoint_raw_local_pub.publish(all_setpoint);
+}
 void command_to_mavros::send_actuator_setpoint(Eigen::Vector4d actuator_sp)
 {
     actuator_setpoint.group_mix = 0;

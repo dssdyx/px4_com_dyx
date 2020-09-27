@@ -287,6 +287,7 @@ int main(int argc, char **argv)
                 {
                     return_origin_flag[0]=true;
                     std_msgs::String Hover_command;
+                    //Command_now.sub_mode = 0;
                     Hover_command.data = "Hover";
                     gesture_pub.publish(Hover_command);
                     cout<<"Which point you choose? 1 for A, 2 for B, 3 for C, 0 for Land"<<endl;
